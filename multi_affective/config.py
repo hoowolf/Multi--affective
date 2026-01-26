@@ -9,9 +9,9 @@ from .io_utils import read_json
 def get_text_cfg(preprocess_dir: Path, override_model: str | None) -> tuple[str, int]:
     cfg = read_json(preprocess_dir / "text_config.json")
     if cfg is None:
-        tokenizer_name = override_model or "bert-base-uncased"
+        tokenizer_name = override_model or "./models/bert-base-uncased"
         return tokenizer_name, 128
-    tokenizer_name = override_model or str(cfg.get("tokenizer_name", "bert-base-uncased"))
+    tokenizer_name = override_model or str(cfg.get("tokenizer_name", "./models/bert-base-uncased"))
     max_len = int(cfg.get("max_len", 128))
     return tokenizer_name, max_len
 

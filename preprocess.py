@@ -79,7 +79,7 @@ def _read_guid_only_index(path: Path) -> list[str]:
     return guids
 
 
-def _token_lengths_with_transformers(texts: list[str], tokenizer_name: str) -> list[int] | None:
+def _token_lengths_with_transformers(texts: list[str], tokenizer_name: str = "./models/bert-base-uncased") -> list[int] | None:
     try:
         from transformers import AutoTokenizer  # type: ignore
 

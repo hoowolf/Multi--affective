@@ -7,3 +7,4 @@ pandas
 scikit-learn
 tqdm
 matplotlib
+modelscope

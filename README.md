@@ -15,8 +15,8 @@ pip install -r requirements.txt
 
 ### 复现流程
 ```bash
-python check_data.py --data-dir .\datasets --output-dir .\outputs --save-json
-python preprocess.py --data-dir .\datasets --output-dir .\outputs --seed 42 --val-ratio 0.1
+python check_data.py --data-dir ./datasets --output-dir ./outputs --save-json
+python preprocess.py --data-dir ./datasets --output-dir ./outputs --seed 42 --val-ratio 0.1
 python train.py --mode all --run-name baseline --deterministic --seed 42 --epochs 5 --batch-size 16
 ```
 

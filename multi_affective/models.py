@@ -7,7 +7,7 @@ import torch.nn as nn
 
 
 class TextEncoder(nn.Module):
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str = "./models/bert-base-uncased"):
         super().__init__()
         from transformers import AutoModel  # type: ignore
 
