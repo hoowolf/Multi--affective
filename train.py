@@ -172,7 +172,7 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
     save_json(out_dir / "run_config.json", run_config)
 
     history: list[dict[str, Any]] = []
-    best = {"epoch": 0, "val_macro_f1": -1.0}
+    best = {"epoch": 0, "val_acc": -1.0}
     patience_left = int(args.early_stop_patience)
 
     for epoch in range(1, int(args.epochs) + 1):
@@ -189,8 +189,8 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
         history.append(row)
         save_history(out_dir, history)
 
-        if val_stats["macro_f1"] > float(best["val_macro_f1"]):
-            best = {"epoch": epoch, "val_macro_f1": float(val_stats["macro_f1"])}
+        if val_stats["acc"] > float(best["val_acc"]):
+            best = {"epoch": epoch, "val_acc": float(val_stats["acc"])}
             torch.save(
                 {
                     "mode": mode,
@@ -212,7 +212,7 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
     plot_curves(history, out_dir / "curves.png")
     final_val = evaluate(model, val_loader, device)
     save_json(out_dir / "final_metrics.json", {"best": best, "final": final_val, "history_tail": history[-5:]})
-    return {"mode": mode, "best_epoch": best["epoch"], "best_val_macro_f1": best["val_macro_f1"], "final": final_val}
+    return {"mode": mode, "best_epoch": best["epoch"], "best_val_acc": best["val_acc"], "final": final_val}
 
 
 def main() -> int:
@@ -241,4 +241,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
