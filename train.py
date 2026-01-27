@@ -192,7 +192,7 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
     elif str(args.lr_scheduler) == "cosine_warmup":
         warm = max(0, int(args.warmup_epochs))
         if warm > 0:
-            warmup = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=0.0, end_factor=1.0, total_iters=warm)
+            warmup = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1e-3, end_factor=1.0, total_iters=warm)
             cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
                 optimizer, T_max=max(1, int(args.epochs) - warm), eta_min=float(args.eta_min)
             )
