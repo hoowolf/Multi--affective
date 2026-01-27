@@ -25,10 +25,18 @@ class TrainConfig:
     dropout: float = 0.1
     fusion_dim: int = 256
     text_model: str | None = "./models/bert-base-uncased"
+    text_aug: str = "baseline"
     image_encoder: str = "resnet18"
+    image_aug: str = "baseline"
     no_pretrained_image: bool = False
     lr_encoder: float = 2e-5
     lr_head: float = 2e-4
+    lr_scheduler: str = "none"
+    warmup_epochs: int = 0
+    eta_min: float = 0.0
+    step_size: int = 10
+    gamma: float = 0.1
+    plateau_patience: int = 2
     weight_decay: float = 0.01
     freeze_encoders: bool = False
     early_stop_patience: int = 2
@@ -62,12 +70,28 @@ def _build_argv(cfg: TrainConfig) -> list[str]:
         str(float(cfg.dropout)),
         "--fusion-dim",
         str(int(cfg.fusion_dim)),
+        "--text-aug",
+        str(cfg.text_aug),
         "--image-encoder",
         str(cfg.image_encoder),
+        "--image-aug",
+        str(cfg.image_aug),
         "--lr-encoder",
         str(float(cfg.lr_encoder)),
         "--lr-head",
         str(float(cfg.lr_head)),
+        "--lr-scheduler",
+        str(cfg.lr_scheduler),
+        "--warmup-epochs",
+        str(int(cfg.warmup_epochs)),
+        "--eta-min",
+        str(float(cfg.eta_min)),
+        "--step-size",
+        str(int(cfg.step_size)),
+        "--gamma",
+        str(float(cfg.gamma)),
+        "--plateau-patience",
+        str(int(cfg.plateau_patience)),
         "--weight-decay",
         str(float(cfg.weight_decay)),
         "--early-stop-patience",
@@ -101,7 +125,7 @@ def run_training(cfg: TrainConfig, *, extra_overrides: dict[str, Any] | None = N
 if __name__ == "__main__":
     run_training(TrainConfig(
         mode="all",
-        run_name="baseline",
+        run_name="cosine_warmup",
         seed=42,
         deterministic=True,
         device="auto",
@@ -115,6 +139,9 @@ if __name__ == "__main__":
         no_pretrained_image=False,
         lr_encoder=2e-5,
         lr_head=2e-4,
+        lr_scheduler="cosine_warmup",
+        warmup_epochs=5,
+        eta_min=1e-6,
         weight_decay=0.01,
         freeze_encoders=False,
         early_stop_patience=4,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import random
 from pathlib import Path
 from typing import Any
 
@@ -39,8 +40,44 @@ class LabeledIndex(Dataset):
         return self.rows[idx]
 
 
+def _augment_text(text: str, aug: str, rng: random.Random) -> str:
+    if aug == "baseline":
+        return text
+    tokens = text.split()
+    if len(tokens) < 2:
+        return text
+    if aug == "weak":
+        kept = [t for t in tokens if rng.random() > 0.1]
+        if not kept:
+            kept = [tokens[rng.randrange(len(tokens))]]
+        if len(kept) >= 2 and rng.random() < 0.2:
+            i = rng.randrange(len(kept) - 1)
+            kept[i], kept[i + 1] = kept[i + 1], kept[i]
+        return " ".join(kept)
+    if aug == "strong":
+        kept = [t for t in tokens if rng.random() > 0.2]
+        if not kept:
+            kept = [tokens[rng.randrange(len(tokens))]]
+        for i in range(len(kept) - 1):
+            if rng.random() < 0.3:
+                kept[i], kept[i + 1] = kept[i + 1], kept[i]
+        if rng.random() < 0.1:
+            kept.insert(rng.randrange(len(kept) + 1), kept[rng.randrange(len(kept))])
+        return " ".join(kept)
+    raise ValueError(f"Unsupported text augmentation: {aug}")
+
+
 class TextDataset(Dataset):
-    def __init__(self, data_dir: Path, index: LabeledIndex, tokenizer_name: str, max_len: int):
+    def __init__(
+        self,
+        data_dir: Path,
+        index: LabeledIndex,
+        tokenizer_name: str,
+        max_len: int,
+        *,
+        text_aug: str = "baseline",
+        train: bool = False,
+    ):
         from transformers import AutoTokenizer  # type: ignore
 
         self.data_dir = data_dir
@@ -48,6 +85,9 @@ class TextDataset(Dataset):
         self.tokenizer_name = tokenizer_name
         self.max_len = int(max_len)
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=True)
+        self.text_aug = str(text_aug)
+        self.train = bool(train)
+        self.rng = random.Random()
 
     def __len__(self) -> int:
         return len(self.index)
@@ -57,6 +97,8 @@ class TextDataset(Dataset):
         text_path = self.data_dir / "data" / f"{guid}.txt"
         raw = text_path.read_text(encoding="utf-8", errors="ignore")
         text = clean_text(raw)
+        if self.train and self.text_aug != "baseline":
+            text = _augment_text(text, self.text_aug, self.rng)
         encoded = self.tokenizer(
             text,
             max_length=self.max_len,

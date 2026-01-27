@@ -49,10 +49,23 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dropout", type=float, default=0.1)
     parser.add_argument("--fusion-dim", type=int, default=256)
     parser.add_argument("--text-model", type=str, default=None)
+    parser.add_argument("--text-aug", type=str, default="baseline", choices=["baseline", "weak", "strong"])
     parser.add_argument("--image-encoder", type=str, default="resnet18")
+    parser.add_argument("--image-aug", type=str, default="baseline", choices=["baseline", "weak", "strong"])
     parser.add_argument("--no-pretrained-image", action="store_true")
     parser.add_argument("--lr-encoder", type=float, default=2e-5)
     parser.add_argument("--lr-head", type=float, default=2e-4)
+    parser.add_argument(
+        "--lr-scheduler",
+        type=str,
+        default="none",
+        choices=["none", "cosine", "cosine_warmup", "step", "plateau"],
+    )
+    parser.add_argument("--warmup-epochs", type=int, default=0)
+    parser.add_argument("--eta-min", type=float, default=0.0)
+    parser.add_argument("--step-size", type=int, default=10)
+    parser.add_argument("--gamma", type=float, default=0.1)
+    parser.add_argument("--plateau-patience", type=int, default=2)
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--freeze-encoders", action="store_true")
     parser.add_argument("--early-stop-patience", type=int, default=2)
@@ -73,19 +86,34 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
     loss_fn = nn.CrossEntropyLoss(weight=class_weights)
 
     text_model_name, max_len = get_text_cfg(args.preprocess_dir, args.text_model)
-    image_transform = make_image_transform(args.preprocess_dir)
+    train_image_transform = make_image_transform(args.preprocess_dir, aug=str(args.image_aug), train=True)
+    val_image_transform = make_image_transform(args.preprocess_dir, aug="baseline", train=False)
     pretrained_image = not bool(args.no_pretrained_image)
 
     if mode == "text":
-        train_ds = TextDataset(args.data_dir, train_index, tokenizer_name=text_model_name, max_len=max_len)
-        val_ds = TextDataset(args.data_dir, val_index, tokenizer_name=text_model_name, max_len=max_len)
+        train_ds = TextDataset(
+            args.data_dir,
+            train_index,
+            tokenizer_name=text_model_name,
+            max_len=max_len,
+            text_aug=str(args.text_aug),
+            train=True,
+        )
+        val_ds = TextDataset(
+            args.data_dir,
+            val_index,
+            tokenizer_name=text_model_name,
+            max_len=max_len,
+            text_aug="baseline",
+            train=False,
+        )
         model: nn.Module = TextOnlyModel(text_model_name=text_model_name, dropout=float(args.dropout))
         head_keywords = ("head",)
         if args.freeze_encoders:
             freeze_module(getattr(model, "encoder"))
     elif mode == "image":
-        train_ds = ImageDataset(args.data_dir, train_index, transform=image_transform)
-        val_ds = ImageDataset(args.data_dir, val_index, transform=image_transform)
+        train_ds = ImageDataset(args.data_dir, train_index, transform=train_image_transform)
+        val_ds = ImageDataset(args.data_dir, val_index, transform=val_image_transform)
         model = ImageOnlyModel(
             image_encoder_name=str(args.image_encoder),
             pretrained=pretrained_image,
@@ -95,10 +123,24 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
         if args.freeze_encoders:
             freeze_module(getattr(model, "encoder"))
     elif mode == "multimodal":
-        train_text = TextDataset(args.data_dir, train_index, tokenizer_name=text_model_name, max_len=max_len)
-        val_text = TextDataset(args.data_dir, val_index, tokenizer_name=text_model_name, max_len=max_len)
-        train_img = ImageDataset(args.data_dir, train_index, transform=image_transform)
-        val_img = ImageDataset(args.data_dir, val_index, transform=image_transform)
+        train_text = TextDataset(
+            args.data_dir,
+            train_index,
+            tokenizer_name=text_model_name,
+            max_len=max_len,
+            text_aug=str(args.text_aug),
+            train=True,
+        )
+        val_text = TextDataset(
+            args.data_dir,
+            val_index,
+            tokenizer_name=text_model_name,
+            max_len=max_len,
+            text_aug="baseline",
+            train=False,
+        )
+        train_img = ImageDataset(args.data_dir, train_index, transform=train_image_transform)
+        val_img = ImageDataset(args.data_dir, val_index, transform=val_image_transform)
         train_ds = MultiDataset(train_text, train_img)
         val_ds = MultiDataset(val_text, val_img)
         model = MultiModalGatedFusionModel(
@@ -142,6 +184,39 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
     if not param_groups:
         raise RuntimeError("No trainable parameters. Disable --freeze-encoders or check model.")
     optimizer = torch.optim.AdamW(param_groups, weight_decay=float(args.weight_decay))
+    if str(args.lr_scheduler) == "cosine":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=int(args.epochs), eta_min=float(args.eta_min)
+        )
+        scheduler_on_val = False
+    elif str(args.lr_scheduler) == "cosine_warmup":
+        warm = max(0, int(args.warmup_epochs))
+        if warm > 0:
+            warmup = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=0.0, end_factor=1.0, total_iters=warm)
+            cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=max(1, int(args.epochs) - warm), eta_min=float(args.eta_min)
+            )
+            scheduler = torch.optim.lr_scheduler.SequentialLR(
+                optimizer, schedulers=[warmup, cosine], milestones=[warm]
+            )
+        else:
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=int(args.epochs), eta_min=float(args.eta_min)
+            )
+        scheduler_on_val = False
+    elif str(args.lr_scheduler) == "step":
+        scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer, step_size=int(args.step_size), gamma=float(args.gamma)
+        )
+        scheduler_on_val = False
+    elif str(args.lr_scheduler) == "plateau":
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=float(args.gamma), patience=int(args.plateau_patience)
+        )
+        scheduler_on_val = True
+    else:
+        scheduler = None
+        scheduler_on_val = False
 
     out_dir = run_root / mode
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -153,7 +228,9 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
         "preprocess_dir": str(args.preprocess_dir),
         "text_model": text_model_name,
         "max_len": int(max_len),
+        "text_aug": str(args.text_aug),
         "image_encoder": str(args.image_encoder),
+        "image_aug": str(args.image_aug),
         "pretrained_image": pretrained_image,
         "dropout": float(args.dropout),
         "fusion_dim": int(args.fusion_dim),
@@ -161,6 +238,12 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
         "batch_size": int(args.batch_size),
         "lr_encoder": float(args.lr_encoder),
         "lr_head": float(args.lr_head),
+        "lr_scheduler": str(args.lr_scheduler),
+        "warmup_epochs": int(args.warmup_epochs),
+        "eta_min": float(args.eta_min),
+        "step_size": int(args.step_size),
+        "gamma": float(args.gamma),
+        "plateau_patience": int(args.plateau_patience),
         "weight_decay": float(args.weight_decay),
         "freeze_encoders": bool(args.freeze_encoders),
         "class_weights": class_weights.detach().cpu().tolist(),
@@ -178,6 +261,12 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
     for epoch in range(1, int(args.epochs) + 1):
         train_stats = train_one_epoch(model, train_loader, optimizer, device)
         val_stats = evaluate(model, val_loader, device)
+        if scheduler is not None:
+            if scheduler_on_val:
+                scheduler.step(val_stats["loss"])
+            else:
+                scheduler.step()
+        current_lrs = [pg.get("lr", None) for pg in optimizer.param_groups]
         row = {
             "epoch": epoch,
             "train_loss": train_stats["loss"],
@@ -185,6 +274,7 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
             "val_loss": val_stats["loss"],
             "val_acc": val_stats["acc"],
             "val_macro_f1": val_stats["macro_f1"],
+            "lr_groups": current_lrs,
         }
         history.append(row)
         save_history(out_dir, history)
