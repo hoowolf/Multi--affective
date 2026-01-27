@@ -92,14 +92,14 @@ def plot_curves(history: list[dict[str, Any]], out_path: Any) -> None:
     epochs = [h["epoch"] for h in history]
     train_loss = [h["train_loss"] for h in history]
     val_loss = [h["val_loss"] for h in history]
-    val_f1 = [h["val_macro_f1"] for h in history]
+    val_acc = [h["val_acc"] for h in history]
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     axes[0].plot(epochs, train_loss, label="train_loss")
     axes[0].plot(epochs, val_loss, label="val_loss")
     axes[0].set_xlabel("epoch")
     axes[0].legend()
-    axes[1].plot(epochs, val_f1, label="val_macro_f1")
+    axes[1].plot(epochs, val_acc, label="val_acc")
     axes[1].set_xlabel("epoch")
     axes[1].legend()
     fig.tight_layout()
@@ -129,4 +129,3 @@ def plot_confusion_matrix(cm: list[list[int]], out_path: Any) -> None:
 def save_history(out_dir: Any, history: list[dict[str, Any]]) -> None:
     save_json(out_dir / "history.json", history)
     save_csv(out_dir / "history.csv", history)
-
