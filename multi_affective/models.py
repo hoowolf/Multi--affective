@@ -109,3 +109,53 @@ class MultiModalGatedFusionModel(nn.Module):
         h = g * t + (1.0 - g) * v
         return self.head(h)
 
+
+class MultiModalConcatFusionModel(nn.Module):
+    def __init__(
+        self,
+        text_model_name: str,
+        image_encoder_name: str = "resnet18",
+        pretrained_image: bool = True,
+        d: int = 256,
+        num_classes: int = 3,
+        dropout: float = 0.1,
+    ):
+        super().__init__()
+        self.text_encoder = TextEncoder(text_model_name)
+        self.image_encoder = ImageEncoder(image_encoder_name, pretrained=pretrained_image)
+        self.text_proj = nn.Linear(self.text_encoder.out_dim, d)
+        self.image_proj = nn.Linear(self.image_encoder.out_dim, d)
+        self.fusion = nn.Linear(d * 2, d)
+        self.head = nn.Sequential(nn.Dropout(dropout), nn.Linear(d, num_classes))
+
+    def forward(self, batch: dict[str, Any]) -> torch.Tensor:
+        t = self.text_encoder(batch["input_ids"], batch["attention_mask"])
+        v = self.image_encoder(batch["image"])
+        t = self.text_proj(t)
+        v = self.image_proj(v)
+        h = torch.relu(self.fusion(torch.cat([t, v], dim=-1)))
+        return self.head(h)
+
+
+class MultiModalLateFusionModel(nn.Module):
+    def __init__(
+        self,
+        text_model_name: str,
+        image_encoder_name: str = "resnet18",
+        pretrained_image: bool = True,
+        num_classes: int = 3,
+        dropout: float = 0.1,
+    ):
+        super().__init__()
+        self.text_encoder = TextEncoder(text_model_name)
+        self.image_encoder = ImageEncoder(image_encoder_name, pretrained=pretrained_image)
+        self.text_head = nn.Sequential(nn.Dropout(dropout), nn.Linear(self.text_encoder.out_dim, num_classes))
+        self.image_head = nn.Sequential(nn.Dropout(dropout), nn.Linear(self.image_encoder.out_dim, num_classes))
+
+    def forward(self, batch: dict[str, Any]) -> torch.Tensor:
+        t = self.text_encoder(batch["input_ids"], batch["attention_mask"])
+        v = self.image_encoder(batch["image"])
+        text_logits = self.text_head(t)
+        image_logits = self.image_head(v)
+        return (text_logits + image_logits) / 2.0
+

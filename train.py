@@ -15,7 +15,13 @@ from multi_affective.config import get_text_cfg, make_image_transform
 from multi_affective.data import ImageDataset, LabeledIndex, MultiDataset, TextDataset
 from multi_affective.io_utils import save_csv, save_json
 from multi_affective.labels import ID2LABEL, LABEL2ID
-from multi_affective.models import ImageOnlyModel, MultiModalGatedFusionModel, TextOnlyModel
+from multi_affective.models import (
+    ImageOnlyModel,
+    MultiModalConcatFusionModel,
+    MultiModalGatedFusionModel,
+    MultiModalLateFusionModel,
+    TextOnlyModel,
+)
 from multi_affective.training import (
     compute_class_weights,
     evaluate,
@@ -48,6 +54,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--dropout", type=float, default=0.1)
     parser.add_argument("--fusion-dim", type=int, default=256)
+    parser.add_argument(
+        "--multimodal-arch",
+        type=str,
+        default="gated",
+        choices=["gated", "concat", "late"],
+    )
     parser.add_argument("--text-model", type=str, default=None)
     parser.add_argument("--text-aug", type=str, default="baseline", choices=["baseline", "weak", "strong"])
     parser.add_argument("--image-encoder", type=str, default="resnet18")
@@ -148,14 +160,34 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
         val_img = ImageDataset(args.data_dir, val_index, transform=val_image_transform)
         train_ds = MultiDataset(train_text, train_img)
         val_ds = MultiDataset(val_text, val_img)
-        model = MultiModalGatedFusionModel(
-            text_model_name=text_model_name,
-            image_encoder_name=str(args.image_encoder),
-            pretrained_image=pretrained_image,
-            d=int(args.fusion_dim),
-            dropout=float(args.dropout),
-        )
-        head_keywords = ("text_proj", "image_proj", "gate", "head")
+        if str(args.multimodal_arch) == "gated":
+            model = MultiModalGatedFusionModel(
+                text_model_name=text_model_name,
+                image_encoder_name=str(args.image_encoder),
+                pretrained_image=pretrained_image,
+                d=int(args.fusion_dim),
+                dropout=float(args.dropout),
+            )
+            head_keywords = ("text_proj", "image_proj", "gate", "head")
+        elif str(args.multimodal_arch) == "concat":
+            model = MultiModalConcatFusionModel(
+                text_model_name=text_model_name,
+                image_encoder_name=str(args.image_encoder),
+                pretrained_image=pretrained_image,
+                d=int(args.fusion_dim),
+                dropout=float(args.dropout),
+            )
+            head_keywords = ("text_proj", "image_proj", "fusion", "head")
+        elif str(args.multimodal_arch) == "late":
+            model = MultiModalLateFusionModel(
+                text_model_name=text_model_name,
+                image_encoder_name=str(args.image_encoder),
+                pretrained_image=pretrained_image,
+                dropout=float(args.dropout),
+            )
+            head_keywords = ("text_head", "image_head")
+        else:
+            raise ValueError(f"Unsupported multimodal architecture: {args.multimodal_arch}")
         if args.freeze_encoders:
             freeze_module(getattr(model, "text_encoder"))
             freeze_module(getattr(model, "image_encoder"))
@@ -223,7 +255,10 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
         scheduler = None
         scheduler_on_val = False
 
-    out_dir = run_root / mode
+    if mode == "multimodal":
+        out_dir = run_root / mode / str(args.multimodal_arch)
+    else:
+        out_dir = run_root / mode
     out_dir.mkdir(parents=True, exist_ok=True)
     run_config = {
         "mode": mode,
@@ -239,6 +274,7 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
         "pretrained_image": pretrained_image,
         "dropout": float(args.dropout),
         "fusion_dim": int(args.fusion_dim),
+        "multimodal_arch": str(getattr(args, "multimodal_arch", "gated")),
         "epochs": int(args.epochs),
         "batch_size": int(args.batch_size),
         "lr_encoder": float(args.lr_encoder),

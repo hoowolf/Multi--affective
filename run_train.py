@@ -24,6 +24,7 @@ class TrainConfig:
     num_workers: int = 0
     dropout: float = 0.1
     fusion_dim: int = 256
+    multimodal_arch: str = "gated"
     text_model: str | None = "./models/bert-base-uncased"
     text_aug: str = "baseline"
     image_encoder: str = "resnet18"
@@ -71,6 +72,8 @@ def _build_argv(cfg: TrainConfig) -> list[str]:
         str(float(cfg.dropout)),
         "--fusion-dim",
         str(int(cfg.fusion_dim)),
+        "--multimodal-arch",
+        str(cfg.multimodal_arch),
         "--text-aug",
         str(cfg.text_aug),
         "--image-encoder",
