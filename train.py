@@ -67,6 +67,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gamma", type=float, default=0.1)
     parser.add_argument("--plateau-patience", type=int, default=2)
     parser.add_argument("--weight-decay", type=float, default=0.01)
+    parser.add_argument("--class-weights", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--freeze-encoders", action="store_true")
     parser.add_argument("--early-stop-patience", type=int, default=2)
     return parser
@@ -82,8 +83,11 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
     train_index = LabeledIndex(args.train_index)
     val_index = LabeledIndex(args.val_index)
 
-    class_weights = compute_class_weights(train_index.rows, num_classes=len(LABEL2ID)).to(device)
-    loss_fn = nn.CrossEntropyLoss(weight=class_weights)
+    if bool(args.class_weights):
+        class_weights = compute_class_weights(train_index.rows, num_classes=len(LABEL2ID)).to(device)
+        loss_fn = nn.CrossEntropyLoss(weight=class_weights)
+    else:
+        loss_fn = nn.CrossEntropyLoss()
 
     text_model_name, max_len = get_text_cfg(args.preprocess_dir, args.text_model)
     train_image_transform = make_image_transform(args.preprocess_dir, aug=str(args.image_aug), train=True)

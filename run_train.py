@@ -38,6 +38,7 @@ class TrainConfig:
     gamma: float = 0.1
     plateau_patience: int = 2
     weight_decay: float = 0.01
+    class_weights: bool = True
     freeze_encoders: bool = False
     early_stop_patience: int = 2
 
@@ -106,6 +107,8 @@ def _build_argv(cfg: TrainConfig) -> list[str]:
         args.append("--deterministic")
     if cfg.no_pretrained_image:
         args.append("--no-pretrained-image")
+    if not cfg.class_weights:
+        args.append("--no-class-weights")
     if cfg.freeze_encoders:
         args.append("--freeze-encoders")
     return args
