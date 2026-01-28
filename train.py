@@ -82,6 +82,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--class-weights", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--freeze-encoders", action="store_true")
     parser.add_argument("--early-stop-patience", type=int, default=2)
+    parser.add_argument("--flood-level", type=float, default=0.0)
     return parser
 
 
@@ -195,6 +196,7 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
         raise ValueError(f"Unsupported mode: {mode}")
 
     setattr(model, "_loss_fn", loss_fn)
+    setattr(model, "_flood_level", max(0.0, float(getattr(args, "flood_level", 0.0))))
     model.to(device)
 
     train_loader = DataLoader(
@@ -293,6 +295,7 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
         "deterministic": bool(args.deterministic),
         "device": str(device),
         "torch_version": torch.__version__,
+        "flood_level": max(0.0, float(getattr(args, "flood_level", 0.0))),
     }
     save_json(out_dir / "run_config.json", run_config)
 

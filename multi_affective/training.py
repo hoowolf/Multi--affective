@@ -68,6 +68,7 @@ def train_one_epoch(model: nn.Module, loader: Any, optimizer: torch.optim.Optimi
     loss_fn = getattr(model, "_loss_fn", None)
     if loss_fn is None:
         raise RuntimeError("Loss function not attached to model")
+    flood_level = float(getattr(model, "_flood_level", 0.0) or 0.0)
     losses: list[float] = []
     correct = 0
     total = 0
@@ -77,6 +78,8 @@ def train_one_epoch(model: nn.Module, loader: Any, optimizer: torch.optim.Optimi
         logits = model(batch)
         y = batch["label"]
         loss = loss_fn(logits, y)
+        if flood_level > 0.0:
+            loss = torch.abs(loss - flood_level) + flood_level
         loss.backward()
         optimizer.step()
         losses.append(float(loss.detach().cpu().item()))

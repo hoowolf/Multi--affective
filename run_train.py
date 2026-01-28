@@ -42,6 +42,7 @@ class TrainConfig:
     class_weights: bool = True
     freeze_encoders: bool = False
     early_stop_patience: int = 2
+    flood_level: float = 0.0
 
 
 def _build_argv(cfg: TrainConfig) -> list[str]:
@@ -100,6 +101,8 @@ def _build_argv(cfg: TrainConfig) -> list[str]:
         str(float(cfg.weight_decay)),
         "--early-stop-patience",
         str(int(cfg.early_stop_patience)),
+        "--flood-level",
+        str(float(cfg.flood_level)),
     ]
 
     if cfg.run_name:
@@ -151,4 +154,5 @@ if __name__ == "__main__":
         weight_decay=0.01,
         freeze_encoders=False,
         early_stop_patience=4,
+        flood_level=0.4,
     ))
