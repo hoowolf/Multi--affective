@@ -200,7 +200,8 @@ def _build_model_from_checkpoint(payload: dict[str, Any]) -> tuple[torch.nn.Modu
     state = payload.get("model_state_dict", None)
     if not isinstance(state, dict):
         raise ValueError("Missing model_state_dict in checkpoint")
-    model.load_state_dict(state, strict=True)
+    cleaned_state = {k: v for k, v in state.items() if not str(k).startswith("_loss_fn.")}
+    model.load_state_dict(cleaned_state, strict=True)
     return model, id2label, run_cfg
 
 
