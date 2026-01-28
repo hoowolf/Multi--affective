@@ -87,6 +87,7 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
         class_weights = compute_class_weights(train_index.rows, num_classes=len(LABEL2ID)).to(device)
         loss_fn = nn.CrossEntropyLoss(weight=class_weights)
     else:
+        class_weights = None
         loss_fn = nn.CrossEntropyLoss()
 
     text_model_name, max_len = get_text_cfg(args.preprocess_dir, args.text_model)
@@ -250,7 +251,8 @@ def _run_one_mode(mode: Mode, args: argparse.Namespace, device: torch.device, ru
         "plateau_patience": int(args.plateau_patience),
         "weight_decay": float(args.weight_decay),
         "freeze_encoders": bool(args.freeze_encoders),
-        "class_weights": class_weights.detach().cpu().tolist(),
+        "use_class_weights": bool(args.class_weights),
+        "class_weights": None if class_weights is None else class_weights.detach().cpu().tolist(),
         "seed": int(args.seed),
         "deterministic": bool(args.deterministic),
         "device": str(device),
