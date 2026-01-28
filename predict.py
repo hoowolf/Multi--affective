@@ -208,7 +208,10 @@ def main() -> int:
     args = _build_parser().parse_args()
     device = torch.device(_resolve_device(str(args.device)))
 
-    ckpt = torch.load(args.checkpoint, map_location="cpu")
+    try:
+        ckpt = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
+    except TypeError:
+        ckpt = torch.load(args.checkpoint, map_location="cpu")
     if not isinstance(ckpt, dict):
         raise ValueError("Checkpoint must be a dict produced by train.py")
     model, id2label, run_cfg = _build_model_from_checkpoint(ckpt)
